@@ -5,6 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WebRTC Минимал — камера + микрофон</title>
+    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
     <style>
         :root {
             --bg: #0b0f14;
@@ -161,7 +162,7 @@
 
 <body>
     <header>
-        <h1>WebRTC: минимальней некуда — камера + микрофон (копипаст‑сигналинг)</h1>
+        <h1>WebRTC: минимальней некуда — камера + микрофон (копипаст‑сигналинг с компрессией)</h1>
     </header>
 
     <main>
@@ -184,36 +185,24 @@
         </section>
 
         <section class="card">
-            <h2>2) Сигналинг «вручную», без сервера</h2>
-            <p class="muted" style="margin-bottom:10px">Открой эту страницу в <strong>двух</strong>
-                вкладках/браузерах/устройствах.
-                Один — <strong>Звонящий</strong>, второй — <strong>Отвечающий</strong>. Копируй‑вставляй SDP как в
-                пещерном веке.</p>
+            <h2>2) Сигналинг с LZ-сжатием</h2>
+            <p class="muted">Копируй компактные base64 строки вместо здоровых JSON. Всё работает прямо сейчас без
+                сервера.</p>
             <div class="row" style="margin-top:8px; gap: 16px; align-items: start;">
                 <div class="col" style="flex:1;">
-                    <h3 style="margin:0 0 6px 0;">Звонящий</h3>
-                    <div class="row">
-                        <button id="btnOffer">Создать Offer</button>
-                        <button id="btnCopyOffer" class="secondary">Копировать</button>
-                    </div>
-                    <textarea id="offer" placeholder="Offer отобразится здесь (JSON SDP)"></textarea>
-                    <div class="row">
-                        <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
-                    </div>
-                    <textarea id="answerIn"
-                        placeholder="Вставь Answer, который прислал Отвечающий (JSON SDP)"></textarea>
+                    <h3>Звонящий</h3>
+                    <button id="btnOffer">Создать Offer</button>
+                    <textarea id="offer" placeholder="Сжатый Offer"></textarea>
+                    <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
+                    <textarea id="answerIn" placeholder="Сжатый Answer от Отвечающего"></textarea>
                 </div>
                 <div class="col" style="flex:1;">
-                    <h3 style="margin:0 0 6px 0;">Отвечающий</h3>
-                    <div class="row">
-                        <button id="btnMakeAnswer">Вставить Offer → Создать Answer</button>
-                        <button id="btnCopyAnswer" class="secondary">Копировать</button>
-                    </div>
-                    <textarea id="offerIn" placeholder="Вставь Offer от Звонящего (JSON SDP)"></textarea>
-                    <textarea id="answerOut" placeholder="Answer отобразится здесь (JSON SDP)"></textarea>
+                    <h3>Отвечающий</h3>
+                    <button id="btnMakeAnswer">Вставить Offer → Создать Answer</button>
+                    <textarea id="offerIn" placeholder="Сжатый Offer от Звонящего"></textarea>
+                    <textarea id="answerOut" placeholder="Сжатый Answer"></textarea>
                 </div>
             </div>
-
             <div class="row" style="margin-top:12px">
                 <span class="muted">ICE: <span id="iceState" class="warn">—</span></span>
                 <span class="muted">Пир‑коннект: <span id="pcState" class="warn">—</span></span>
@@ -222,21 +211,16 @@
     </main>
 
     <script>
-        // ====== Минимальный WebRTC с копипаст‑сигналингом ======
         const $ = (id) => document.getElementById(id);
-
-        let pc;                 // RTCPeerConnection
-        let localStream;        // MediaStream
-
+        let pc;
+        let localStream;
         const iceState = $("iceState");
         const pcState = $("pcState");
         const mediaStatus = $("mediaStatus");
 
-        // Инициализация RTCPeerConnection с публичным STUN
         function createPeer() {
             if (pc) return pc;
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-
             pc.addEventListener('icecandidate', (e) => {
                 if (!e.candidate) iceState.textContent = 'gathering complete';
             });
@@ -247,11 +231,8 @@
                 pcState.textContent = pc.connectionState;
             });
             pc.addEventListener('track', (e) => {
-                // В упрощённом варианте берём первый поток
                 const [stream] = e.streams;
-                if (stream) {
-                    $("remote").srcObject = stream;
-                }
+                if (stream) $("remote").srcObject = stream;
             });
             return pc;
         }
@@ -263,11 +244,10 @@
                 $("local").srcObject = localStream;
                 mediaStatus.innerHTML = '<span class="ok">камера+микрофон активны</span>';
                 createPeer();
-                // Добавляем все дорожки в PeerConnection
                 localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
                 return localStream;
             } catch (err) {
-                mediaStatus.innerHTML = '<span class="err">доступ отклонён: ' + (err && err.message ? err.message : err) + '</span>';
+                mediaStatus.innerHTML = '<span class="err">доступ отклонён: ' + (err.message || err) + '</span>';
                 throw err;
             }
         }
@@ -285,57 +265,47 @@
             });
         }
 
-        // === Звонящий: создаёт Offer ===
+        function compress(obj) {
+            return LZString.compressToBase64(JSON.stringify(obj));
+        }
+        function decompress(str) {
+            return JSON.parse(LZString.decompressFromBase64(str));
+        }
+
         async function makeOffer() {
             await startLocal();
             createPeer();
             const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
             await pc.setLocalDescription(offer);
             await waitIceComplete(pc);
-            $("offer").value = JSON.stringify(pc.localDescription);
+            $("offer").value = compress(pc.localDescription);
         }
 
-        // === Отвечающий: вставляет Offer, создаёт Answer ===
         async function acceptOfferAndMakeAnswer() {
             await startLocal();
             createPeer();
             const offerStr = $("offerIn").value.trim();
             if (!offerStr) return alert('Вставь Offer');
-            let offer;
-            try { offer = JSON.parse(offerStr); } catch { return alert('Offer должен быть JSON из левого поля'); }
+            const offer = decompress(offerStr);
             await pc.setRemoteDescription(offer);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             await waitIceComplete(pc);
-            $("answerOut").value = JSON.stringify(pc.localDescription);
+            $("answerOut").value = compress(pc.localDescription);
         }
 
-        // === Звонящий: вставляет Answer ===
         async function setRemoteAnswer() {
             const ansStr = $("answerIn").value.trim();
             if (!ansStr) return alert('Вставь Answer');
-            let answer;
-            try { answer = JSON.parse(ansStr); } catch { return alert('Answer должен быть JSON из правого поля'); }
+            const answer = decompress(ansStr);
             await pc.setRemoteDescription(answer);
         }
 
-        // === Мелочи для удобства ===
-        function copy(id) {
-            const el = $(id);
-            el.select();
-            el.setSelectionRange(0, 99999);
-            document.execCommand('copy');
-        }
-
-        // === Wire up UI ===
         $("btnStart").addEventListener('click', startLocal);
         $("btnOffer").addEventListener('click', makeOffer);
         $("btnMakeAnswer").addEventListener('click', acceptOfferAndMakeAnswer);
         $("btnSetAnswer").addEventListener('click', setRemoteAnswer);
-        $("btnCopyOffer").addEventListener('click', () => copy('offer'));
-        $("btnCopyAnswer").addEventListener('click', () => copy('answerOut'));
 
-        // Маленькие подсказки по окружению
         if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
             const warn = document.createElement('div');
             warn.className = 'card';
