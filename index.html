@@ -5,313 +5,126 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WebRTC Минимал — камера + микрофон</title>
-    <script src="https://cdn.jsdelivr.net/npm/lz-string@1.5.0/libs/lz-string.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
     <style>
-        :root {
-            --bg: #0b0f14;
-            --card: #121821;
-            --ink: #e6eef7;
-            --muted: #9ab;
-            --accent: #7cc8ff;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
         body {
             margin: 0;
-            background: var(--bg);
-            color: var(--ink);
-            font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            background: #0b0f14;
+            color: #e6eef7;
+            font: 15px system-ui, sans-serif;
         }
 
         header {
-            padding: 16px 20px;
-            border-bottom: 1px solid #1c2633;
-            position: sticky;
-            top: 0;
-            background: linear-gradient(180deg, rgba(11, 15, 20, .9), rgba(11, 15, 20, .6));
-            backdrop-filter: blur(6px);
-        }
-
-        header h1 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 600;
+            padding: 10px 14px;
+            font-weight: bold;
+            background: #121821;
         }
 
         main {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            padding: 16px;
-        }
-
-        @media (max-width: 920px) {
-            main {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid #1c2633;
-            border-radius: 16px;
-            padding: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
-        }
-
-        .row {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .col {
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-        }
-
-        h2 {
-            margin: 0 0 8px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        p {
-            margin: 0;
-            color: var(--muted);
+            gap: 10px;
         }
 
         video {
             width: 100%;
             background: #000;
-            border-radius: 12px;
-            aspect-ratio: 16/9;
+            border-radius: 8px;
         }
 
         textarea {
             width: 100%;
-            min-height: 140px;
-            resize: vertical;
-            background: #0c121a;
-            color: var(--ink);
-            border: 1px solid #1c2633;
-            border-radius: 10px;
-            padding: 10px;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            min-height: 100px;
             font-size: 12px;
         }
 
         button {
-            appearance: none;
-            border: 1px solid #26445f;
-            background: #13202d;
-            color: var(--ink);
-            padding: 10px 14px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        button:hover {
-            border-color: #2d6996;
-            box-shadow: 0 0 0 3px rgba(124, 200, 255, .12) inset;
-        }
-
-        button.secondary {
-            background: #0d1620;
-            border-color: #273446;
-            font-weight: 500;
-        }
-
-        code.badge {
-            background: #0d1620;
-            border: 1px solid #273446;
-            padding: 2px 6px;
-            border-radius: 6px;
-            font-size: 12px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        .ok {
-            color: #67df9d;
-        }
-
-        .warn {
-            color: #ffd479;
-        }
-
-        .err {
-            color: #ff7a7a;
+            margin: 4px 0;
+            padding: 6px 10px;
         }
     </style>
 </head>
 
 <body>
-    <header>
-        <h1>WebRTC: минимальней некуда — камера + микрофон (копипаст‑сигналинг с компрессией)</h1>
-    </header>
-
+    <header>WebRTC минимал (сжатие быстрее на телефонах)</header>
     <main>
-        <section class="card">
-            <h2>1) Локальные потоки</h2>
-            <div class="row">
-                <button id="btnStart">Включить камеру+микрофон</button>
-                <span id="mediaStatus" class="muted">ещё не запущено</span>
-            </div>
-            <div class="grid" style="margin-top:12px;">
-                <div class="col">
-                    <p class="muted">Локальное видео</p>
-                    <video id="local" autoplay playsinline muted></video>
-                </div>
-                <div class="col">
-                    <p class="muted">Удалённое видео</p>
-                    <video id="remote" autoplay playsinline></video>
-                </div>
-            </div>
-        </section>
-
-        <section class="card">
-            <h2>2) Сигналинг с LZ-сжатием</h2>
-            <p class="muted">Копируй компактные base64 строки вместо здоровых JSON. Всё работает прямо сейчас без
-                сервера.</p>
-            <div class="row" style="margin-top:8px; gap: 16px; align-items: start;">
-                <div class="col" style="flex:1;">
-                    <h3>Звонящий</h3>
-                    <button id="btnOffer">Создать Offer</button>
-                    <textarea id="offer" placeholder="Сжатый Offer"></textarea>
-                    <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
-                    <textarea id="answerIn" placeholder="Сжатый Answer от Отвечающего"></textarea>
-                </div>
-                <div class="col" style="flex:1;">
-                    <h3>Отвечающий</h3>
-                    <button id="btnMakeAnswer">Вставить Offer → Создать Answer</button>
-                    <textarea id="offerIn" placeholder="Сжатый Offer от Звонящего"></textarea>
-                    <textarea id="answerOut" placeholder="Сжатый Answer"></textarea>
-                </div>
-            </div>
-            <div class="row" style="margin-top:12px">
-                <span class="muted">ICE: <span id="iceState" class="warn">—</span></span>
-                <span class="muted">Пир‑коннект: <span id="pcState" class="warn">—</span></span>
-            </div>
-        </section>
+        <button id="btnStart">Камера+микрофон</button>
+        <video id="local" autoplay playsinline muted></video>
+        <video id="remote" autoplay playsinline></video>
+        <div>
+            <h3>Звонящий</h3>
+            <button id="btnOffer">Создать Offer</button>
+            <textarea id="offer" placeholder="Сжатый Offer"></textarea>
+            <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
+            <textarea id="answerIn" placeholder="Сжатый Answer"></textarea>
+        </div>
+        <div>
+            <h3>Отвечающий</h3>
+            <button id="btnMakeAnswer">Вставить Offer → Answer</button>
+            <textarea id="offerIn" placeholder="Сжатый Offer"></textarea>
+            <textarea id="answerOut" placeholder="Сжатый Answer"></textarea>
+        </div>
     </main>
-
     <script>
-        const $ = (id) => document.getElementById(id);
-        let pc;
-        let localStream;
-        const iceState = $("iceState");
-        const pcState = $("pcState");
-        const mediaStatus = $("mediaStatus");
+        const $ = id => document.getElementById(id);
+        let pc, localStream;
 
         function createPeer() {
             if (pc) return pc;
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            pc.addEventListener('icecandidate', (e) => {
-                if (!e.candidate) iceState.textContent = 'gathering complete';
-            });
-            pc.addEventListener('icegatheringstatechange', () => {
-                iceState.textContent = pc.iceGatheringState;
-            });
-            pc.addEventListener('connectionstatechange', () => {
-                pcState.textContent = pc.connectionState;
-            });
-            pc.addEventListener('track', (e) => {
-                const [stream] = e.streams;
-                if (stream) $("remote").srcObject = stream;
-            });
+            pc.ontrack = e => { $("remote").srcObject = e.streams[0]; };
             return pc;
         }
 
         async function startLocal() {
-            if (localStream) return localStream;
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                $("local").srcObject = localStream;
-                mediaStatus.innerHTML = '<span class="ok">камера+микрофон активны</span>';
-                createPeer();
-                localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-                return localStream;
-            } catch (err) {
-                mediaStatus.innerHTML = '<span class="err">доступ отклонён: ' + (err.message || err) + '</span>';
-                throw err;
-            }
-        }
-
-        function waitIceComplete(pc) {
-            return new Promise((resolve) => {
-                if (pc.iceGatheringState === 'complete') return resolve();
-                const onState = () => {
-                    if (pc.iceGatheringState === 'complete') {
-                        pc.removeEventListener('icegatheringstatechange', onState);
-                        resolve();
-                    }
-                };
-                pc.addEventListener('icegatheringstatechange', onState);
-            });
+            if (localStream) return;
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            $("local").srcObject = localStream;
+            createPeer();
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
         }
 
         function compress(obj) {
-            return LZString.compressToBase64(JSON.stringify(obj));
+            const str = JSON.stringify(obj);
+            const binStr = pako.deflate(str, { to: 'string' });
+            return btoa(binStr);
         }
         function decompress(str) {
-            return JSON.parse(LZString.decompressFromBase64(str));
+            const binStr = atob(str);
+            const inflated = pako.inflate(binStr, { to: 'string' });
+            return JSON.parse(inflated);
         }
 
         async function makeOffer() {
             await startLocal();
             createPeer();
-            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+            const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            await waitIceComplete(pc);
+            await new Promise(r => { if (pc.iceGatheringState === 'complete') return r(); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') r(); }; });
             $("offer").value = compress(pc.localDescription);
         }
 
         async function acceptOfferAndMakeAnswer() {
             await startLocal();
             createPeer();
-            const offerStr = $("offerIn").value.trim();
-            if (!offerStr) return alert('Вставь Offer');
-            const offer = decompress(offerStr);
+            const offer = decompress($("offerIn").value.trim());
             await pc.setRemoteDescription(offer);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            await waitIceComplete(pc);
+            await new Promise(r => { if (pc.iceGatheringState === 'complete') return r(); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') r(); }; });
             $("answerOut").value = compress(pc.localDescription);
         }
 
         async function setRemoteAnswer() {
-            const ansStr = $("answerIn").value.trim();
-            if (!ansStr) return alert('Вставь Answer');
-            const answer = decompress(ansStr);
+            const answer = decompress($("answerIn").value.trim());
             await pc.setRemoteDescription(answer);
         }
 
-        $("btnStart").addEventListener('click', startLocal);
-        $("btnOffer").addEventListener('click', makeOffer);
-        $("btnMakeAnswer").addEventListener('click', acceptOfferAndMakeAnswer);
-        $("btnSetAnswer").addEventListener('click', setRemoteAnswer);
-
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-            const warn = document.createElement('div');
-            warn.className = 'card';
-            warn.innerHTML = '<strong>Напоминание:</strong> getUserMedia / WebRTC требуют HTTPS (или localhost).';
-            document.body.prepend(warn);
-        }
+        $("btnStart").onclick = startLocal;
+        $("btnOffer").onclick = makeOffer;
+        $("btnMakeAnswer").onclick = acceptOfferAndMakeAnswer;
+        $("btnSetAnswer").onclick = setRemoteAnswer;
     </script>
 </body>
 
