@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebRTC Минимал — камера + микрофон</title>
+    <style>
+        :root {
+            --bg: #0b0f14;
+            --card: #121821;
+            --ink: #e6eef7;
+            --muted: #9ab;
+            --accent: #7cc8ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font: 15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+        }
+
+        header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #1c2633;
+            position: sticky;
+            top: 0;
+            background: linear-gradient(180deg, rgba(11, 15, 20, .9), rgba(11, 15, 20, .6));
+            backdrop-filter: blur(6px);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            padding: 16px;
+        }
+
+        @media (max-width: 920px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid #1c2633;
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        h2 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+        }
+
+        video {
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            aspect-ratio: 16/9;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 140px;
+            resize: vertical;
+            background: #0c121a;
+            color: var(--ink);
+            border: 1px solid #1c2633;
+            border-radius: 10px;
+            padding: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+        }
+
+        button {
+            appearance: none;
+            border: 1px solid #26445f;
+            background: #13202d;
+            color: var(--ink);
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            border-color: #2d6996;
+            box-shadow: 0 0 0 3px rgba(124, 200, 255, .12) inset;
+        }
+
+        button.secondary {
+            background: #0d1620;
+            border-color: #273446;
+            font-weight: 500;
+        }
+
+        code.badge {
+            background: #0d1620;
+            border: 1px solid #273446;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .ok {
+            color: #67df9d;
+        }
+
+        .warn {
+            color: #ffd479;
+        }
+
+        .err {
+            color: #ff7a7a;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>WebRTC: минимальней некуда — камера + микрофон (копипаст‑сигналинг)</h1>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>1) Локальные потоки</h2>
+            <div class="row">
+                <button id="btnStart">Включить камеру+микрофон</button>
+                <span id="mediaStatus" class="muted">ещё не запущено</span>
+            </div>
+            <div class="grid" style="margin-top:12px;">
+                <div class="col">
+                    <p class="muted">Локальное видео</p>
+                    <video id="local" autoplay playsinline muted></video>
+                </div>
+                <div class="col">
+                    <p class="muted">Удалённое видео</p>
+                    <video id="remote" autoplay playsinline></video>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>2) Сигналинг «вручную», без сервера</h2>
+            <p class="muted" style="margin-bottom:10px">Открой эту страницу в <strong>двух</strong>
+                вкладках/браузерах/устройствах.
+                Один — <strong>Звонящий</strong>, второй — <strong>Отвечающий</strong>. Копируй‑вставляй SDP как в
+                пещерном веке.</p>
+            <div class="row" style="margin-top:8px; gap: 16px; align-items: start;">
+                <div class="col" style="flex:1;">
+                    <h3 style="margin:0 0 6px 0;">Звонящий</h3>
+                    <div class="row">
+                        <button id="btnOffer">Создать Offer</button>
+                        <button id="btnCopyOffer" class="secondary">Копировать</button>
+                    </div>
+                    <textarea id="offer" placeholder="Offer отобразится здесь (JSON SDP)"></textarea>
+                    <div class="row">
+                        <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
+                    </div>
+                    <textarea id="answerIn"
+                        placeholder="Вставь Answer, который прислал Отвечающий (JSON SDP)"></textarea>
+                </div>
+                <div class="col" style="flex:1;">
+                    <h3 style="margin:0 0 6px 0;">Отвечающий</h3>
+                    <div class="row">
+                        <button id="btnMakeAnswer">Вставить Offer → Создать Answer</button>
+                        <button id="btnCopyAnswer" class="secondary">Копировать</button>
+                    </div>
+                    <textarea id="offerIn" placeholder="Вставь Offer от Звонящего (JSON SDP)"></textarea>
+                    <textarea id="answerOut" placeholder="Answer отобразится здесь (JSON SDP)"></textarea>
+                </div>
+            </div>
+
+            <div class="row" style="margin-top:12px">
+                <span class="muted">ICE: <span id="iceState" class="warn">—</span></span>
+                <span class="muted">Пир‑коннект: <span id="pcState" class="warn">—</span></span>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // ====== Минимальный WebRTC с копипаст‑сигналингом ======
+        const $ = (id) => document.getElementById(id);
+
+        let pc;                 // RTCPeerConnection
+        let localStream;        // MediaStream
+
+        const iceState = $("iceState");
+        const pcState = $("pcState");
+        const mediaStatus = $("mediaStatus");
+
+        // Инициализация RTCPeerConnection с публичным STUN
+        function createPeer() {
+            if (pc) return pc;
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+
+            pc.addEventListener('icecandidate', (e) => {
+                if (!e.candidate) iceState.textContent = 'gathering complete';
+            });
+            pc.addEventListener('icegatheringstatechange', () => {
+                iceState.textContent = pc.iceGatheringState;
+            });
+            pc.addEventListener('connectionstatechange', () => {
+                pcState.textContent = pc.connectionState;
+            });
+            pc.addEventListener('track', (e) => {
+                // В упрощённом варианте берём первый поток
+                const [stream] = e.streams;
+                if (stream) {
+                    $("remote").srcObject = stream;
+                }
+            });
+            return pc;
+        }
+
+        async function startLocal() {
+            if (localStream) return localStream;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                $("local").srcObject = localStream;
+                mediaStatus.innerHTML = '<span class="ok">камера+микрофон активны</span>';
+                createPeer();
+                // Добавляем все дорожки в PeerConnection
+                localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+                return localStream;
+            } catch (err) {
+                mediaStatus.innerHTML = '<span class="err">доступ отклонён: ' + (err && err.message ? err.message : err) + '</span>';
+                throw err;
+            }
+        }
+
+        function waitIceComplete(pc) {
+            return new Promise((resolve) => {
+                if (pc.iceGatheringState === 'complete') return resolve();
+                const onState = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        pc.removeEventListener('icegatheringstatechange', onState);
+                        resolve();
+                    }
+                };
+                pc.addEventListener('icegatheringstatechange', onState);
+            });
+        }
+
+        // === Звонящий: создаёт Offer ===
+        async function makeOffer() {
+            await startLocal();
+            createPeer();
+            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+            await pc.setLocalDescription(offer);
+            await waitIceComplete(pc);
+            $("offer").value = JSON.stringify(pc.localDescription);
+        }
+
+        // === Отвечающий: вставляет Offer, создаёт Answer ===
+        async function acceptOfferAndMakeAnswer() {
+            await startLocal();
+            createPeer();
+            const offerStr = $("offerIn").value.trim();
+            if (!offerStr) return alert('Вставь Offer');
+            let offer;
+            try { offer = JSON.parse(offerStr); } catch { return alert('Offer должен быть JSON из левого поля'); }
+            await pc.setRemoteDescription(offer);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await waitIceComplete(pc);
+            $("answerOut").value = JSON.stringify(pc.localDescription);
+        }
+
+        // === Звонящий: вставляет Answer ===
+        async function setRemoteAnswer() {
+            const ansStr = $("answerIn").value.trim();
+            if (!ansStr) return alert('Вставь Answer');
+            let answer;
+            try { answer = JSON.parse(ansStr); } catch { return alert('Answer должен быть JSON из правого поля'); }
+            await pc.setRemoteDescription(answer);
+        }
+
+        // === Мелочи для удобства ===
+        function copy(id) {
+            const el = $(id);
+            el.select();
+            el.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+        }
+
+        // === Wire up UI ===
+        $("btnStart").addEventListener('click', startLocal);
+        $("btnOffer").addEventListener('click', makeOffer);
+        $("btnMakeAnswer").addEventListener('click', acceptOfferAndMakeAnswer);
+        $("btnSetAnswer").addEventListener('click', setRemoteAnswer);
+        $("btnCopyOffer").addEventListener('click', () => copy('offer'));
+        $("btnCopyAnswer").addEventListener('click', () => copy('answerOut'));
+
+        // Маленькие подсказки по окружению
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            const warn = document.createElement('div');
+            warn.className = 'card';
+            warn.innerHTML = '<strong>Напоминание:</strong> getUserMedia / WebRTC требуют HTTPS (или localhost).';
+            document.body.prepend(warn);
+        }
+    </script>
+</body>
+
+</html>
