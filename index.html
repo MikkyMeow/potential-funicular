@@ -4,8 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebRTC Минимал — камера + микрофон</title>
-    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <title>WebRTC Минимал — только микрофон</title>
     <style>
         body {
             margin: 0;
@@ -27,12 +26,6 @@
             gap: 10px;
         }
 
-        video {
-            width: 100%;
-            background: #000;
-            border-radius: 8px;
-        }
-
         textarea {
             width: 100%;
             min-height: 100px;
@@ -47,23 +40,21 @@
 </head>
 
 <body>
-    <header>WebRTC минимал (сжатие быстрее на телефонах)</header>
+    <header>WebRTC минимал — только аудио</header>
     <main>
-        <button id="btnStart">Камера+микрофон</button>
-        <video id="local" autoplay playsinline muted></video>
-        <video id="remote" autoplay playsinline></video>
+        <button id="btnStart">Включить микрофон</button>
         <div>
             <h3>Звонящий</h3>
             <button id="btnOffer">Создать Offer</button>
-            <textarea id="offer" placeholder="Сжатый Offer"></textarea>
+            <textarea id="offer" placeholder="Offer"></textarea>
             <button id="btnSetAnswer">Вставить Answer → Set Remote</button>
-            <textarea id="answerIn" placeholder="Сжатый Answer"></textarea>
+            <textarea id="answerIn" placeholder="Answer"></textarea>
         </div>
         <div>
             <h3>Отвечающий</h3>
             <button id="btnMakeAnswer">Вставить Offer → Answer</button>
-            <textarea id="offerIn" placeholder="Сжатый Offer"></textarea>
-            <textarea id="answerOut" placeholder="Сжатый Answer"></textarea>
+            <textarea id="offerIn" placeholder="Offer"></textarea>
+            <textarea id="answerOut" placeholder="Answer"></textarea>
         </div>
     </main>
     <script>
@@ -73,27 +64,15 @@
         function createPeer() {
             if (pc) return pc;
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            pc.ontrack = e => { $("remote").srcObject = e.streams[0]; };
+            pc.ontrack = e => { const audio = new Audio(); audio.srcObject = e.streams[0]; audio.autoplay = true; };
             return pc;
         }
 
         async function startLocal() {
             if (localStream) return;
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            $("local").srcObject = localStream;
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             createPeer();
             localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-        }
-
-        function compress(obj) {
-            const str = JSON.stringify(obj);
-            const binStr = pako.deflate(str, { to: 'string' });
-            return btoa(binStr);
-        }
-        function decompress(str) {
-            const binStr = atob(str);
-            const inflated = pako.inflate(binStr, { to: 'string' });
-            return JSON.parse(inflated);
         }
 
         async function makeOffer() {
@@ -102,22 +81,22 @@
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             await new Promise(r => { if (pc.iceGatheringState === 'complete') return r(); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') r(); }; });
-            $("offer").value = compress(pc.localDescription);
+            $("offer").value = JSON.stringify(pc.localDescription);
         }
 
         async function acceptOfferAndMakeAnswer() {
             await startLocal();
             createPeer();
-            const offer = decompress($("offerIn").value.trim());
+            const offer = JSON.parse($("offerIn").value.trim());
             await pc.setRemoteDescription(offer);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             await new Promise(r => { if (pc.iceGatheringState === 'complete') return r(); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') r(); }; });
-            $("answerOut").value = compress(pc.localDescription);
+            $("answerOut").value = JSON.stringify(pc.localDescription);
         }
 
         async function setRemoteAnswer() {
-            const answer = decompress($("answerIn").value.trim());
+            const answer = JSON.parse($("answerIn").value.trim());
             await pc.setRemoteDescription(answer);
         }
 
